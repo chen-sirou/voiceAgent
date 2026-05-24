@@ -1,5 +1,4 @@
 import json
-import asyncio
 import websockets
 from urllib.parse import urlencode
 
