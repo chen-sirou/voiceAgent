@@ -18,6 +18,8 @@ from config import (
 from stt_deepgram import DeepgramSTT
 from registration_agent import VisitorRegistrationAgent
 
+from guard_query_agent import GuardQueryAgent
+from guard_config import is_guard_phone
 
 app = FastAPI()
 twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
@@ -97,13 +99,6 @@ def speak_to_caller(call_sid: str, text: str):
     except Exception as e:
         print("Twilio 播放失败:", e)
 
-
-def get_or_create_agent(call_sid: str) -> VisitorRegistrationAgent:
-    if call_sid not in call_sessions:
-        call_sessions[call_sid] = VisitorRegistrationAgent()
-    return call_sessions[call_sid]
-
-
 def should_ignore_text(call_sid: str, text: str) -> bool:
     text = text.strip()
 
@@ -123,6 +118,37 @@ def should_ignore_text(call_sid: str, text: str) -> bool:
     last_processed_text[call_sid] = text
     return False
 
+def make_session_key(mode: str, call_sid: str) -> str:
+    return f"{mode}:{call_sid}"
+
+def get_or_create_visitor_agent(call_sid: str):
+    key = make_session_key("visitor", call_sid)
+
+    if key not in call_sessions:
+        call_sessions[key] = VisitorRegistrationAgent()
+
+    return call_sessions[key]
+
+def get_or_create_guard_agent(call_sid: str):
+    key = make_session_key("guard", call_sid)
+
+    if key not in call_sessions:
+        call_sessions[key] = GuardQueryAgent()
+
+    return call_sessions[key]
+
+def cleanup_call_session(call_sid: str):
+    if not call_sid:
+        return
+
+    for mode in ["visitor", "guard"]:
+        key = make_session_key(mode, call_sid)
+        call_sessions.pop(key, None)
+
+    last_processed_text.pop(call_sid, None)
+    agent_speaking_until.pop(call_sid, None)
+
+    print("已清理通话 session:", call_sid)
 
 @app.websocket("/media-stream")
 async def media_stream(twilio_ws: WebSocket):
@@ -146,6 +172,7 @@ async def media_stream(twilio_ws: WebSocket):
                 event = data.get("event")
 
                 if event == "start":
+
                     print("电话音频流开始")
 
                     start_info = data.get("start", {})
@@ -160,15 +187,37 @@ async def media_stream(twilio_ws: WebSocket):
                         print("警告：没有获取到 call_sid")
                         continue
 
-                    agent = get_or_create_agent(call_sid)
-
                     caller_phone = custom_params.get("caller_phone")
-                    if caller_phone:
-                        memory_reply = agent.preload_by_caller_phone(caller_phone)
-                        print("来电号码:", caller_phone)
 
-                        if memory_reply:
-                            speak_to_caller(call_sid, memory_reply)
+                    print("来电号码:", caller_phone)
+
+                    if is_guard_phone(caller_phone):
+
+                        print("进入门卫查询模式")
+
+                        agent = get_or_create_guard_agent(call_sid)
+
+                        speak_to_caller(
+                            call_sid,
+                            "您好，门卫查询模式已开启。"
+                        )
+
+                    else:
+
+                        print("进入访客登记模式")
+
+                        agent = get_or_create_visitor_agent(call_sid)
+
+                        if caller_phone:
+
+                            memory_reply = agent.preload_by_caller_phone(
+                                caller_phone
+                            )
+                            if memory_reply:
+                                speak_to_caller(
+                                    call_sid,
+                                    memory_reply
+                                )
 
                     print("CallSid:", call_sid)
 
@@ -183,6 +232,7 @@ async def media_stream(twilio_ws: WebSocket):
 
                 elif event == "stop":
                     print("电话音频流停止")
+                    cleanup_call_session(call_sid)
                     break
 
         except Exception as e:
@@ -214,8 +264,9 @@ async def media_stream(twilio_ws: WebSocket):
 
                 speak_to_caller(call_sid, reply)
 
-                if getattr(agent.state, "finished", False):
+                if hasattr(agent, "state") and getattr(agent.state, "finished", False):
                     print("本次登记流程结束")
+                    cleanup_call_session(call_sid)
 
         except Exception as e:
             print("STT/Agent 处理出错:", e)
