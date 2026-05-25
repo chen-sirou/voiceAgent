@@ -40,7 +40,7 @@ LETTER_MAP = {
     "欸": "A",
 
     "比": "B",
-    "逼": "B",
+    "壁": "B",
     "币": "B",
 
     "西": "C",
@@ -98,7 +98,7 @@ def correct_plate_province(text: str) -> str:
     """
     纠正：
     这A12345 → 浙A12345
-    浙江A12345 → 浙A12345
+    上海B54321 → 沪B54321
     """
 
     text = clean_text(text)
@@ -207,7 +207,6 @@ def find_best_company(
 
         code = company.get("code")
 
-        # 公司编号匹配
         if code:
 
             code_clean = clean_text(str(code))
