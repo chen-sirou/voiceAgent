@@ -35,6 +35,43 @@ DIGIT_MAP = {
     "九": "9",
 }
 
+LETTER_MAP = {
+    "诶": "A",
+    "欸": "A",
+
+    "比": "B",
+    "逼": "B",
+    "币": "B",
+
+    "西": "C",
+    "吸": "C",
+
+    "迪": "D",
+    "弟": "D",
+
+    "伊": "E",
+    "一": "E",
+
+    "艾弗": "F",
+    "爱弗": "F",
+
+    "鸡": "G",
+    "记": "G",
+}
+
+
+def normalize_plate_letters(text: str) -> str:
+    """
+    纠正语音识别中的车牌字母：
+    浙诶12345 -> 浙A12345
+    浙比12345 -> 浙B12345
+    浙西12345 -> 浙C12345
+    """
+
+    for wrong, right in LETTER_MAP.items():
+        text = text.replace(wrong, right)
+
+    return text
 
 def normalize_chinese_digits(text: str) -> str:
     for cn, num in DIGIT_MAP.items():
@@ -49,6 +86,7 @@ def clean_text(text: str) -> str:
         return ""
 
     text = normalize_chinese_digits(text)
+    text = normalize_plate_letters(text)
 
     for ch in [" ", "，", ",", "。", ".", "-", "·"]:
         text = text.replace(ch, "")
@@ -66,7 +104,7 @@ def correct_plate_province(text: str) -> str:
     text = clean_text(text)
 
     match = re.search(
-        r"([\u4e00-\u9fa5]+)([A-Z])([A-Z0-9]{4,6})",
+        r"([\u4e00-\u9fa5]+)([A-Z])([0-9]{4,6})",
         text
     )
 

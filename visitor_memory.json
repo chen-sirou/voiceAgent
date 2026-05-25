@@ -29,5 +29,14 @@
       "安装",
       "商务洽谈"
     ]
+  },
+  "visitors": {
+    "15126155311": {
+      "plate_number": "浙A32541",
+      "target_company": "蓝色鲸鱼科技",
+      "phone": "15126155311",
+      "last_visit_reason": "送货",
+      "last_entry_time": "2026-05-25 11:33:21"
+    }
   }
 }
