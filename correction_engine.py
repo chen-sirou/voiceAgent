@@ -104,7 +104,7 @@ def correct_plate_province(text: str) -> str:
     text = clean_text(text)
 
     match = re.search(
-        r"([\u4e00-\u9fa5]+)([A-Z])([0-9]{4,6})",
+        r"([\u4e00-\u9fa5])([A-Z])([0-9]{5,6})",
         text
     )
 
