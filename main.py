@@ -27,7 +27,8 @@ twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 call_sessions = {}
 last_processed_text = {}
 agent_speaking_until = {}
-
+finished_calls = set()
+last_spoken_text = {}
 
 @app.post("/voice")
 @app.post("/voice/")
@@ -52,11 +53,11 @@ async def voice_webhook(request: Request):
     response.append(start)
 
     response.say(
-        "您好，这里是园区来客登记，请说出您的车牌号、要去的公司和来访事由。",
+        "您好",
         language="zh-CN",
         voice="Polly.Zhiyu",
     )
-
+    response.append(start)
     response.pause(length=300)
 
     return Response(content=str(response), media_type="application/xml")
@@ -79,14 +80,19 @@ def build_stream_twiml(call_sid: str, text: str) -> str:
 
 
 def estimate_speech_seconds(text: str) -> float:
-    return max(2.5, min(15.0, len(text) * 0.22))
+    return max(3.0, min(5.0, len(text) * 0.35))
 
 
 def speak_to_caller(call_sid: str, text: str):
     if not call_sid:
         print("没有 call_sid，无法播放回复")
         return
+    if last_spoken_text.get(call_sid) == text:
+        print("忽略重复播报:", text)
+        return
 
+    last_spoken_text[call_sid] = text
+    
     try:
         agent_speaking_until[call_sid] = time.time() + estimate_speech_seconds(text)
 
@@ -138,6 +144,9 @@ def get_or_create_guard_agent(call_sid: str):
     return call_sessions[key]
 
 def cleanup_call_session(call_sid: str):
+    finished_calls.discard(call_sid)
+    last_spoken_text.pop(call_sid, None)
+    
     if not call_sid:
         return
 
@@ -199,7 +208,7 @@ async def media_stream(twilio_ws: WebSocket):
 
                         speak_to_caller(
                             call_sid,
-                            "您好，门卫查询模式已开启。"
+                            "您好，门卫查询模式已开启，请说出您要查询的内容。"
                         )
 
                     else:
@@ -218,7 +227,12 @@ async def media_stream(twilio_ws: WebSocket):
                                     call_sid,
                                     memory_reply
                                 )
-
+                                agent_speaking_until[call_sid] = time.time() + 8
+                        else:
+                            speak_to_caller(
+                                call_sid,
+                                "您好，这里是园区来客登记，请说出您的车牌号、要去的公司和来访事由。"
+                            )
                     print("CallSid:", call_sid)
 
                 elif event == "media":
@@ -232,7 +246,12 @@ async def media_stream(twilio_ws: WebSocket):
 
                 elif event == "stop":
                     print("电话音频流停止")
-                    cleanup_call_session(call_sid)
+                    try:
+                        if stt.ws:
+                            await stt.ws.send(json.dumps({"type": "Finalize"}))
+                            await asyncio.sleep(1.0)
+                    except Exception as e:
+                        print("Deepgram finalize 失败:", e)
                     break
 
         except Exception as e:
@@ -258,6 +277,10 @@ async def media_stream(twilio_ws: WebSocket):
 
                 print("用户说:", text)
 
+                if call_sid in finished_calls:
+                    print("通话已完成，忽略后续识别:", text)
+                    continue
+                
                 reply = agent.handle_user_text(text)
 
                 print("Agent 回复:", reply)
@@ -266,7 +289,7 @@ async def media_stream(twilio_ws: WebSocket):
 
                 if hasattr(agent, "state") and getattr(agent.state, "finished", False):
                     print("本次登记流程结束")
-                    cleanup_call_session(call_sid)
+                    finished_calls.add(call_sid)
 
         except Exception as e:
             print("STT/Agent 处理出错:", e)

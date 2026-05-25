@@ -7,6 +7,7 @@ class DeepgramSTT:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.ws = None
+        self.last_transcript = ""
 
     async def connect(self):
         params = {
@@ -63,13 +64,13 @@ class DeepgramSTT:
                 continue
 
             if msg_type == "UtteranceEnd":
-                if final_parts:
-                    full_text = "".join(final_parts).strip()
-                    final_parts.clear()
+                full_text = "".join(final_parts).strip() or self.last_transcript.strip()
+                final_parts.clear()
+                self.last_transcript = ""
 
-                    if full_text:
-                        print("Deepgram UtteranceEnd 输出:", full_text)
-                        yield full_text
+                if full_text:
+                    print("Deepgram UtteranceEnd 输出:", full_text)
+                    yield full_text
 
                 continue
 
@@ -93,6 +94,8 @@ class DeepgramSTT:
             if not transcript:
                 continue
 
+            self.last_transcript = transcript
+
             is_final = data.get("is_final", False)
             speech_final = data.get("speech_final", False)
 
@@ -108,9 +111,10 @@ class DeepgramSTT:
             if is_final:
                 final_parts.append(transcript)
 
-            if speech_final and final_parts:
-                full_text = "".join(final_parts).strip()
+            if speech_final:
+                full_text = "".join(final_parts).strip() or self.last_transcript.strip()
                 final_parts.clear()
+                self.last_transcript = ""
 
                 if full_text:
                     print("Deepgram speech_final 输出:", full_text)

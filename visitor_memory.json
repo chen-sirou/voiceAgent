@@ -29,5 +29,14 @@
       "安装",
       "商务洽谈"
     ]
+  },
+  "visitors": {
+    "15126155312": {
+      "plate_number": "沪B54321",
+      "target_company": "蓝色鲸鱼科技",
+      "phone": "15126155312",
+      "last_visit_reason": "面试",
+      "last_entry_time": "2026-05-25 12:49:21"
+    }
   }
 }
