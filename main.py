@@ -29,9 +29,10 @@ last_processed_text = {}
 agent_speaking_until = {}
 finished_calls = set()
 last_spoken_text = {}
+caller_phone_by_call_sid = {}
+greeting_played = set()
 
 @app.post("/voice")
-@app.post("/voice/")
 async def voice_webhook(request: Request):
     form = await request.form()
 
@@ -53,31 +54,33 @@ async def voice_webhook(request: Request):
     response.append(start)
 
     response.say(
-        "您好",
         language="zh-CN",
         voice="Polly.Zhiyu",
     )
-    response.append(start)
     response.pause(length=300)
 
     return Response(content=str(response), media_type="application/xml")
 
 
-def build_stream_twiml(call_sid: str, text: str) -> str:
+def build_stream_twiml(call_sid: str, text: str, caller_phone: str | None = None) -> str:
     safe_text = html.escape(text)
+
+    caller_param = ""
+    if caller_phone:
+        caller_param = f'<Parameter name="caller_phone" value="{html.escape(caller_phone)}" />'
 
     return f"""
 <Response>
     <Start>
         <Stream url="wss://{PUBLIC_HOST}/media-stream">
             <Parameter name="call_sid" value="{html.escape(call_sid)}" />
+            {caller_param}
         </Stream>
     </Start>
     <Say language="zh-CN" voice="Polly.Zhiyu">{safe_text}</Say>
     <Pause length="300"/>
 </Response>
 """
-
 
 def estimate_speech_seconds(text: str) -> float:
     return max(3.0, min(5.0, len(text) * 0.35))
@@ -87,24 +90,28 @@ def speak_to_caller(call_sid: str, text: str):
     if not call_sid:
         print("没有 call_sid，无法播放回复")
         return
+
     if last_spoken_text.get(call_sid) == text:
         print("忽略重复播报:", text)
         return
 
     last_spoken_text[call_sid] = text
-    
+
+    caller_phone = caller_phone_by_call_sid.get(call_sid)
+
     try:
         agent_speaking_until[call_sid] = time.time() + estimate_speech_seconds(text)
 
         twilio_client.calls(call_sid).update(
-            twiml=build_stream_twiml(call_sid, text)
+            twiml=build_stream_twiml(call_sid, text, caller_phone)
         )
 
         print("已播放给用户:", text)
 
     except Exception as e:
         print("Twilio 播放失败:", e)
-
+        
+    
 def should_ignore_text(call_sid: str, text: str) -> bool:
     text = text.strip()
 
@@ -146,6 +153,7 @@ def get_or_create_guard_agent(call_sid: str):
 def cleanup_call_session(call_sid: str):
     finished_calls.discard(call_sid)
     last_spoken_text.pop(call_sid, None)
+    greeting_played.discard(call_sid)
     
     if not call_sid:
         return
@@ -197,42 +205,46 @@ async def media_stream(twilio_ws: WebSocket):
                         continue
 
                     caller_phone = custom_params.get("caller_phone")
-
+                    if caller_phone:
+                        caller_phone_by_call_sid[call_sid] = caller_phone
+                    else:
+                        caller_phone = caller_phone_by_call_sid.get(call_sid)
                     print("来电号码:", caller_phone)
 
                     if is_guard_phone(caller_phone):
-
                         print("进入门卫查询模式")
-
                         agent = get_or_create_guard_agent(call_sid)
 
-                        speak_to_caller(
-                            call_sid,
-                            "您好，门卫查询模式已开启，请说出您要查询的内容。"
-                        )
+                        if call_sid not in greeting_played:
+                            greeting_played.add(call_sid)
+                            speak_to_caller(
+                                call_sid,
+                                "您好，门卫查询模式已开启，请说出您要查询的内容。"
+                            )
 
                     else:
 
                         print("进入访客登记模式")
-
                         agent = get_or_create_visitor_agent(call_sid)
 
-                        if caller_phone:
+                        if call_sid not in greeting_played:
+                            greeting_played.add(call_sid)
 
-                            memory_reply = agent.preload_by_caller_phone(
-                                caller_phone
-                            )
-                            if memory_reply:
+                            if caller_phone:
+                                memory_reply = agent.preload_by_caller_phone(caller_phone)
+
+                                if memory_reply:
+                                    speak_to_caller(call_sid, memory_reply)
+                                else:
+                                    speak_to_caller(
+                                        call_sid,
+                                        "您好，这里是园区来客登记，请说出您的车牌号、要去的公司和来访事由。"
+                                    )
+                            else:
                                 speak_to_caller(
                                     call_sid,
-                                    memory_reply
+                                    "您好，这里是园区来客登记，请说出您的车牌号、要去的公司和来访事由。"
                                 )
-                                agent_speaking_until[call_sid] = time.time() + 8
-                        else:
-                            speak_to_caller(
-                                call_sid,
-                                "您好，这里是园区来客登记，请说出您的车牌号、要去的公司和来访事由。"
-                            )
                     print("CallSid:", call_sid)
 
                 elif event == "media":
