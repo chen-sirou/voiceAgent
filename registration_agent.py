@@ -140,7 +140,7 @@ class VisitorRegistrationAgent:
         if self.waiting_memory_confirmation:
             if intent == "confirm":
                 return self._finalize_registration(
-                    "好的，已按上次信息完成登记，您可以挂断电话。"
+                    "好的，已按上次信息完成登记。"
                 )
 
             if intent == "deny":
@@ -162,7 +162,7 @@ class VisitorRegistrationAgent:
         if self.state.waiting_for_confirmation:
             if intent == "confirm":
                 return self._finalize_registration(
-                    "好的，登记完成，您可以挂断电话了。"
+                    "好的，登记完成。"
                 )
 
             if intent == "deny":

@@ -18,7 +18,8 @@
         ],
         "code": "A102"
       },
-      "蓝色鲸鱼科技"
+      "蓝色鲸鱼科技",
+      "腾讯"
     ],
     "visit_reasons": [
       "送货",
@@ -31,19 +32,26 @@
     ]
   },
   "visitors": {
-    "15126155312": {
+    "15126155314": {
       "plate_number": "沪B54321",
       "target_company": "蓝色鲸鱼科技",
-      "phone": "15126155312",
+      "phone": "15126155314",
       "last_visit_reason": "面试",
       "last_entry_time": "2026-05-25 12:49:21"
     },
+    "15126155313": {
+      "plate_number": "浙A54321",
+      "target_company": "腾讯",
+      "phone": "15126155313",
+      "last_visit_reason": "面试",
+      "last_entry_time": "2026-05-30 00:09:13"
+    },
     "15126155311": {
-      "plate_number": "沪B32541",
+      "plate_number": "浙A12345",
       "target_company": "蓝色鲸鱼科技",
       "phone": "15126155311",
       "last_visit_reason": "面试",
-      "last_entry_time": "2026-05-25 13:22:33"
+      "last_entry_time": "2026-05-30 00:17:47"
     }
   }
 }

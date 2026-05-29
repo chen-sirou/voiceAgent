@@ -16,10 +16,17 @@ class DeepgramSTT:
             "sample_rate": "8000",
             "channels": "1",
             "language": "zh-CN",
+
+            # 输出优化
             "punctuate": "true",
             "smart_format": "true",
+            "numerals": "true",
+
+            # 实时识别
             "interim_results": "true",
-            "endpointing": "1200",
+
+            # 断句参数
+            "endpointing": "800",
             "utterance_end_ms": "1200",
             "vad_events": "true",
         }
@@ -51,22 +58,39 @@ class DeepgramSTT:
         if self.ws:
             await self.ws.send(audio_bytes)
 
+    async def close(self):
+        if self.ws:
+            await self.ws.close()
+            self.ws = None
+            print("Deepgram STT 已关闭")
+
     async def receive_final_text(self):
         final_parts = []
+        has_yielded_current_utterance = False
 
         async for message in self.ws:
             data = json.loads(message)
-
             msg_type = data.get("type")
 
             if msg_type == "SpeechStarted":
                 print("Deepgram 检测到用户开始说话")
+
+                final_parts.clear()
+                self.last_transcript = ""
+                has_yielded_current_utterance = False
                 continue
 
             if msg_type == "UtteranceEnd":
-                full_text = "".join(final_parts).strip() or self.last_transcript.strip()
+                if has_yielded_current_utterance:
+                    final_parts.clear()
+                    self.last_transcript = ""
+                    continue
+
+                full_text = " ".join(final_parts).strip()
+
                 final_parts.clear()
                 self.last_transcript = ""
+                has_yielded_current_utterance = True
 
                 if full_text:
                     print("Deepgram UtteranceEnd 输出:", full_text)
@@ -112,9 +136,14 @@ class DeepgramSTT:
                 final_parts.append(transcript)
 
             if speech_final:
-                full_text = "".join(final_parts).strip() or self.last_transcript.strip()
+                if has_yielded_current_utterance:
+                    continue
+
+                full_text = " ".join(final_parts).strip() or self.last_transcript.strip()
+
                 final_parts.clear()
                 self.last_transcript = ""
+                has_yielded_current_utterance = True
 
                 if full_text:
                     print("Deepgram speech_final 输出:", full_text)

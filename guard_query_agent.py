@@ -86,50 +86,38 @@ class GuardQueryAgent:
 
     def _generate_answer(self, user_text: str, plan: dict, records: list[dict]) -> str:
         prompt = f"""
-你是园区门卫查询 Agent。
+    你是园区门卫查询 Agent。
 
-用户原始问题：
-{user_text}
+    用户原始问题：
+    {user_text}
 
-你的查询计划：
-{json.dumps(plan, ensure_ascii=False)}
+    你的查询计划：
+    {json.dumps(plan, ensure_ascii=False)}
 
-查询到的记录：
-{json.dumps(records, ensure_ascii=False)}
+    查询到的记录：
+    {json.dumps(records, ensure_ascii=False)}
 
-请用简短自然的中文回答门卫。
-如果是数量问题，直接回答数量。
-如果是是否来过，回答查到或没查到。
-如果是列表问题，列出关键信息。
-不要编造不存在的数据。
-"""
+    请用简短、自然、适合电话播报的中文回答门卫。
+
+    要求：
+    1. 只输出自然中文。
+    2. 不要输出 JSON。
+    3. 不要输出 result、字段名、代码。
+    4. 如果没有查到记录，就说：没有查到相关来访记录。
+    5. 如果是数量问题，直接回答数量。
+    6. 如果是是否来过，回答查到或没查到。
+    7. 如果是列表问题，列出车牌、公司、来访事由和时间。
+    8. 不要编造不存在的数据。
+    """
 
         try:
-            return self.llm.generate_json(prompt)
-        except Exception:
+            return self.llm.generate_text(prompt)
+        except Exception as e:
+            print("门卫自然语言回答生成失败:", e)
             return self._fallback_answer(plan, records)
 
-    def _fallback_answer(self, plan: dict, records: list[dict]) -> str:
-        operation = plan.get("operation")
-
-        if operation == "count":
-            return f"查询到 {len(records)} 条来访记录。"
-
-        if operation == "exists":
-            if records:
-                return f"查到了，有 {len(records)} 条相关记录。"
-            return "没有查到相关来访记录。"
-
+    def _fallback_answer(self, plan, records):
         if not records:
             return "没有查到相关来访记录。"
 
-        lines = ["查询到以下记录："]
-        for r in records[:5]:
-            lines.append(
-                f"{r.get('entry_time')}，"
-                f"车牌{r.get('plate_number')}，"
-                f"来访单位{r.get('target_company')}，"
-                f"事由{r.get('visit_reason')}。"
-            )
-
-        return "\n".join(lines)
+        return f"查到 {len(records)} 条相关记录。"
